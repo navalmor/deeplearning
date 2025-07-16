@@ -22,6 +22,224 @@ The application uses the **Eye Aspect Ratio (EAR)** method for eye state detecti
 4. **State Determination**: Compares EAR against threshold to determine if eyes are open/closed
 5. **Blink Detection**: Tracks consecutive closed frames to register blinks
 
+## 🗺️ Application Workflow & Architecture
+
+### 📊 Main Application Flow
+```
+                    🎬 START APPLICATION
+                            │
+                            ▼
+                    📷 Initialize Camera
+                            │
+                            ▼
+                    🔄 Main Detection Loop
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+  📹 Capture Frame   🎛️ Process Input    📊 Update Display
+        │                   │                   │
+        ▼                   ▼                   ▼
+  🔍 Detect Eyes     ⌨️ Handle Keys      📺 Show Results
+        │                   │                   │
+        └───────────────────┼───────────────────┘
+                            ▼
+                    ❓ Continue? (q to quit)
+                            │
+                    ┌───────┴───────┐
+                    ▼               ▼
+                   YES             NO
+                    │               │
+                    └─────┐    🛑 EXIT
+                          │
+                          └──────┘
+```
+
+### 🧠 Eye Detection Algorithm Workflow
+
+#### Simple Version (Haar Cascades)
+```
+📹 Input Frame
+    │
+    ▼
+🔄 Convert to Grayscale ─────┐
+    │                        │
+    ▼                        │
+👤 Detect Faces              │
+    │                        │
+    ▼                        │
+📍 For Each Face:            │
+    │                        │
+    ├─ 📐 Define ROI          │
+    │   (Upper face region)   │
+    │                        │
+    ├─ 👁️ Detect Eyes         │
+    │   │                    │
+    │   ├─ Count Eyes         │
+    │   ├─ Calculate Area     │
+    │   └─ Draw Rectangles    │
+    │                        │
+    ├─ 📊 Analyze Eye State   │
+    │   │                    │
+    │   ├─ Compare Areas      │
+    │   ├─ Track Changes      │
+    │   └─ Update Counters    │
+    │                        │
+    └─ 📝 Generate Status     │
+                              │
+                              ▼
+                        📺 Display Result
+```
+
+#### Advanced Version (dlib + EAR)
+```
+📹 Input Frame
+    │
+    ▼
+🔄 Convert to Grayscale
+    │
+    ▼
+👤 Detect Faces (dlib HOG)
+    │
+    ▼
+📍 For Each Face:
+    │
+    ├─ 🎯 Get 68 Landmarks
+    │   │
+    │   ├─ Points 36-41 (Left Eye)
+    │   └─ Points 42-47 (Right Eye)
+    │
+    ├─ 📏 Calculate EAR
+    │   │
+    │   ├─ Left Eye EAR = (|p2-p6| + |p3-p5|) / (2×|p1-p4|)
+    │   ├─ Right Eye EAR = (|p2-p6| + |p3-p5|) / (2×|p1-p4|)
+    │   └─ Average EAR = (Left + Right) / 2
+    │
+    ├─ 🔍 Analyze State
+    │   │
+    │   ├─ EAR < Threshold? → CLOSED
+    │   ├─ EAR ≥ Threshold? → OPEN
+    │   └─ Track Consecutive Frames
+    │
+    ├─ 💫 Detect Blinks
+    │   │
+    │   ├─ Closed → Open = Blink
+    │   └─ Increment Counter
+    │
+    └─ 🎨 Visual Feedback
+        │
+        ├─ Draw Face Rectangle
+        ├─ Draw Eye Landmarks
+        └─ Display EAR Values
+```
+
+### 🏗️ Component Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    EYE DETECTION APPLICATION                │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐                │
+│  │   UI LAYER      │    │  CONTROL LAYER  │                │
+│  │                 │    │                 │                │
+│  │ • Display       │◄──►│ • Key Handler   │                │
+│  │ • Text Overlay  │    │ • State Manager │                │
+│  │ • Visual Feed   │    │ • Counter Logic │                │
+│  └─────────────────┘    └─────────────────┘                │
+│           ▲                       ▲                        │
+│           │                       │                        │
+│           ▼                       ▼                        │
+│  ┌─────────────────┐    ┌─────────────────┐                │
+│  │ DETECTION CORE  │    │  CAMERA LAYER   │                │
+│  │                 │    │                 │                │
+│  │ • Face Detect   │◄──►│ • Frame Capture │                │
+│  │ • Eye Detect    │    │ • Video Stream  │                │
+│  │ • EAR Calculate │    │ • Image Process │                │
+│  │ • State Logic   │    └─────────────────┘                │
+│  └─────────────────┘                                       │
+│           ▲                                                 │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────┐                                       │
+│  │ ALGORITHM LAYER │                                       │
+│  │                 │                                       │
+│  │ • OpenCV Haar   │  OR  • dlib HOG + SVM                │
+│  │ • Area Method   │      • EAR Algorithm                  │
+│  │ • Simple Logic  │      • Landmark Detection             │
+│  └─────────────────┘                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 🔄 Data Flow Diagram
+```
+Camera Input ───┐
+                │
+                ▼
+        ┌───────────────┐
+        │  Frame Buffer │
+        └───────┬───────┘
+                │
+                ▼
+        ┌───────────────┐
+        │ Preprocessing │ ◄─── Settings
+        │ (Grayscale,   │      (Threshold,
+        │  Flip, etc.)  │       Sensitivity)
+        └───────┬───────┘
+                │
+                ▼
+        ┌───────────────┐
+        │ Face Detection│
+        └───────┬───────┘
+                │
+        ┌───────┴───────┐
+        ▼               ▼
+┌─────────────┐   ┌─────────────┐
+│ Eye Detection│   │   No Face   │
+│    Module     │   │   Found     │
+└─────┬───────┘   └─────────────┘
+      │
+      ▼
+┌─────────────┐
+│ State Analysis│ ◄─── Historical Data
+│ (Open/Close) │      (Previous States,
+└─────┬───────┘       Blink Counter)
+      │
+      ▼
+┌─────────────┐
+│ Blink Logic │
+│ & Counting  │
+└─────┬───────┘
+      │
+      ▼
+┌─────────────┐      ┌─────────────┐
+│   Output    │ ────►│   Display   │
+│ Generation  │      │   Overlay   │
+└─────────────┘      └─────────────┘
+```
+
+### ⚙️ Configuration & Settings Flow
+```
+Default Settings ─────┐
+                      │
+Command Line Args ────┼─── Settings Merger
+                      │
+Runtime Adjustments ──┘
+(+/- keys)
+      │
+      ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Sensitivity │    │ Frame Count │    │ Display     │
+│ Threshold   │    │ Threshold   │    │ Options     │
+└─────┬───────┘    └─────┬───────┘    └─────┬───────┘
+      │                  │                  │
+      └──────────────────┼──────────────────┘
+                         │
+                         ▼
+                 ┌─────────────┐
+                 │ Detection   │
+                 │ Algorithm   │
+                 └─────────────┘
+```
+
 ### Eye Aspect Ratio Formula
 
 ```
